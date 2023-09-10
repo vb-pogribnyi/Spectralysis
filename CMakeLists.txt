@@ -8,7 +8,6 @@ set (CMAKE_BUILD_TYPE "Release")
 
 # This project consist of 3 components, each in one directory, so add each of them
 add_subdirectory(Engine)
-add_subdirectory(DemoApp)
 add_subdirectory(PythonWrapper)
 
 
