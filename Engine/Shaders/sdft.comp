@@ -1,0 +1,72 @@
+#version 450
+
+layout(set=0, binding=0) readonly buffer signalSSBOIn {
+	vec2 signalIn[];
+};
+
+layout(set=1, binding=0) buffer signalSSBOOut {
+	vec2 signalOut[];
+};
+
+// local_size_x = SPECTROGRAM HEIGHT / 2
+// local_size_y = spectrogram width
+layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform SDFTState {
+	int stageStride;
+	int hop;
+	int isWriteImg;
+	int isInverse;
+	int isShift;
+	int specHeight;
+} state;
+
+vec2 cexp (vec2 z) {
+	return exp(z.x) * vec2(cos(z.y), sin(z.y));
+}
+
+vec2 cmul(vec2 a, vec2 b) {
+	return mat2(a.x, a.y, -a.y, a.x) * b;
+}
+
+void runSDFT(int idx, int offset) {
+	if (idx >= state.specHeight / 2) {
+		return;
+	}
+	int out_idx = idx + offset * state.specHeight;
+	// signalOut[out_idx].x = float(idx);
+	
+	int stride = state.stageStride;
+    int src_idx = int(idx / stride) * 2 * stride + idx % stride;
+    int dst_idx = (int(idx / stride) * 2 + 1) * stride + idx % stride;
+	
+	vec2 even = signalIn[src_idx + offset * state.hop];
+	vec2 odd = signalIn[dst_idx + offset * state.hop];
+	
+	if (state.isInverse == 1) {
+		even.y *= -1;
+		odd.y *= -1;
+	}
+	int N = state.specHeight / stride;
+	int k = idx / stride;
+	vec2 t = cmul(cexp(vec2(0, -2 * 3.1415 * float(k) / N)), odd);
+	
+	
+	if (state.isShift == 1) {
+		signalOut[out_idx + state.specHeight / 2] = even + t;
+		signalOut[out_idx] = even - t;
+	} else {
+		signalOut[out_idx] = even + t;
+		signalOut[out_idx + state.specHeight / 2] = even - t;
+	}
+	if (state.isInverse == 1) {
+		signalOut[out_idx].y *= -1;
+		signalOut[out_idx + state.specHeight / 2].y *= -1;
+	}
+	
+}
+
+
+void main() {
+	runSDFT(int(gl_GlobalInvocationID.x), int(gl_GlobalInvocationID.y));
+}

@@ -1,0 +1,35 @@
+#version 450
+
+layout(set=0, binding=0) buffer signalSSBOIn {
+	vec2 signalIn[];
+};
+
+layout(set=1, binding=0) buffer signalSSBOOut {
+	vec2 signalOut[];
+};
+layout(push_constant) uniform FilterState {
+	int stride;
+	int out_stride;
+	int spec_height;
+	int signal_len;
+} state;
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+void main() {
+	int x = int(gl_GlobalInvocationID.x);
+	int y = int(gl_GlobalInvocationID.y);
+	if (x >= state.stride) {
+		return;
+	}
+	if (y >= state.signal_len) {
+		return;
+	}
+	int out_idx = y * state.out_stride + x;
+	int src_idx_1 = y * state.spec_height + x;
+	int src_idx_2 = src_idx_1 + state.stride;
+
+	signalOut[out_idx].x = signalIn[src_idx_1].x + signalIn[src_idx_2].x;
+	// signalOut[out_idx].x = src_idx_1;
+	// signalOut[out_idx].y = src_idx_2;
+}

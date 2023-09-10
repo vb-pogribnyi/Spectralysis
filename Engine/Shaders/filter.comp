@@ -1,0 +1,60 @@
+#version 450
+#define SUMMATION_SIZE 32
+
+layout(set=0, binding=0) buffer filtersSSBO {
+	vec2 filters[];
+};
+
+layout(set=1, binding=0) buffer signalSSBOIn {
+	vec2 signalIn[];
+};
+
+layout(set=2, binding=0) buffer signalSSBOOut {
+	vec2 signalOut[];
+};
+layout(push_constant) uniform FilterState {
+	int signal_len;
+	int hop;
+	int spec_height;
+} state;
+
+layout(local_size_x = SUMMATION_SIZE, local_size_y = 32, local_size_z = 1) in;
+
+shared float sums[SUMMATION_SIZE*32];
+
+void main() {
+	int filter_idx = int(gl_GlobalInvocationID.x);
+	int src_idx = int(gl_GlobalInvocationID.y);
+	
+	// Find filter indices and Ks
+	int filter_idx1 = min(src_idx * 31 / state.signal_len, 31);						// SEGMENT_WIDTH - 1
+	int filter_idx2 = min(filter_idx1 + 1, 31);										// SEGMENT_WIDTH - 1
+	float k = float(src_idx % state.hop) / state.hop;
+	
+	
+	int out_idx = state.spec_height * src_idx / SUMMATION_SIZE + filter_idx / SUMMATION_SIZE;
+	float filter_value = (filters[filter_idx1 * state.spec_height + filter_idx].x * (1 - k) +
+		filters[filter_idx2 * state.spec_height + filter_idx].x * k);
+
+	uint shared_id = gl_LocalInvocationID.y * SUMMATION_SIZE + gl_LocalInvocationID.x;
+	sums[shared_id] = signalIn[src_idx + filter_idx].x * filter_value / state.spec_height;
+	// sums[shared_id] = 1;
+	
+	
+	int i = 0;
+	for (i = SUMMATION_SIZE / 2; i >= 0; i /= 2) {
+		if (i == 0) {
+			break;
+		}
+		if (gl_LocalInvocationID.x >= i) {
+			return;
+		}
+		sums[shared_id] += sums[shared_id + i];
+		barrier();
+	}
+	// signalOut[out_idx].x = signalIn[src_idx + filter_idx].x * filter_value / state.spec_height;
+	signalOut[out_idx].x = sums[shared_id];
+	
+	// signalOut[out_idx].x = src_idx + filter_idx;
+	// signalOut[out_idx].y = filter_idx1 * state.spec_height + filter_idx;
+}

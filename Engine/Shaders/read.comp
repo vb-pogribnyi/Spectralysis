@@ -1,0 +1,35 @@
+#version 450
+
+layout(set=0, binding=0) readonly buffer signalSSBOIn {
+	int signalIn[];
+};
+
+layout(set=1, binding=0) writeonly buffer signalSSBOOut {
+	vec2 signalOut[];
+};
+
+layout(push_constant) uniform WriteInfo {
+	int src_rows;
+	int src_cols;
+	int dst_rows;
+	int dst_cols;
+} info;
+
+
+layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+	if (gl_GlobalInvocationID.x > info.dst_rows) {
+		return;
+	}
+	uint out_idx = gl_GlobalInvocationID.y * info.dst_rows + gl_GlobalInvocationID.x;
+	uint src_row = uint(float(gl_GlobalInvocationID.x) / info.dst_rows * info.src_rows);
+	uint src_col = uint(float(gl_GlobalInvocationID.y) / info.dst_cols * info.src_cols);
+	uint src_idx = src_col * info.src_rows + src_row;
+	
+	int value = signalIn[src_idx];
+	// signalOut[out_idx].x = src_row;
+	// signalOut[out_idx].y = src_col;
+	signalOut[out_idx].x = float(value & 0xff) / 255;
+	// signalOut[out_idx].y = src_idx;
+}
